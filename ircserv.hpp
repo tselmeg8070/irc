@@ -9,5 +9,10 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <poll.h>
+#include <vector>
+
+# define MAX_CLIENTS 10
+# define MAX_EVENTS 11
 
 #endif

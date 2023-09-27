@@ -6,19 +6,24 @@
 /*   By: tadiyamu <tadiyamu@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/09/21 13:41:47 by tadiyamu          #+#    #+#             */
-/*   Updated: 2023/09/21 14:42:19 by tadiyamu         ###   ########.fr       */
+/*   Updated: 2023/09/27 18:05:45 by tadiyamu         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ircserv.hpp"
+#include "Client.hpp"
 
 int	createServerSocket(int port, std::string password)
 {
 	int					sockFD;
 	int					opt;
+	int					nbFDs;
 	struct sockaddr_in	serverAddress;
+	struct pollfd		fds[MAX_EVENTS];
+	int					pollResult;
 
 	(void) password;
+	memset(fds, 0, sizeof(fds));
 	opt = 1;
 	sockFD = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockFD == -1)
@@ -48,22 +53,67 @@ int	createServerSocket(int port, std::string password)
 		close(sockFD);
 		return (1);
 	}
+	fds[0].fd = sockFD;
+	fds[0].events = POLLIN;
+	nbFDs = 1;
 	std::cout << "Server is listening on port " << port << std::endl;
+	std::vector<Client> clients;
 	while (true)
 	{
-		struct sockaddr_in clientAddress;
-		socklen_t clientAddressLength = sizeof(clientAddress);
-		int clientSocket = accept(sockFD, (struct sockaddr*)&clientAddress, &clientAddressLength);
-		if (clientSocket == -1) {
-			std::cerr << "Error accepting client connection"  << std::endl;
-			continue;
+		pollResult = poll(fds, nbFDs, -1);
+		if (pollResult == -1)
+		{
+			std::cerr << "Error in poll: " << std::endl;
+			break;
 		}
-
-		// Handle the new client connection here
-		// You can spawn a new thread or process to handle each client
-
-		close(clientSocket);
+		for (int i = 0; i < nbFDs; i++)
+		{
+			if (fds[i].revents & POLLIN)
+			{
+				if (fds[i].fd == sockFD)
+				{
+					//Adding new socket client to server
+					struct sockaddr_in clientAddress;
+					socklen_t clientAddressLength = sizeof(clientAddress);
+					int clientSocket = accept(sockFD, (struct sockaddr*)&clientAddress, &clientAddressLength);
+					if (clientSocket == -1) {
+						std::cerr << "Error accepting client connection"  << std::endl;
+						continue;
+					}
+					Client newClient(clientSocket, "guest");
+					clients.push_back(newClient);
+					fds[nbFDs].fd = clientSocket;
+					fds[nbFDs].events = POLLIN;
+					nbFDs++;
+				}
+				else
+				{
+					char buffer[1024];
+					int bytesRead = recv(fds[i].fd, buffer, sizeof(buffer), 0);
+					if (bytesRead <= 0)
+					{
+						close(fds[i].fd);
+						clients.erase(clients.begin() + i);
+						fds[i].fd = -1;
+					}
+					else
+					{
+						std::cout << buffer << std::endl;
+					}
+				}
+			}
+		}
+		//shifting fds
+		int j = 0;
+		for (int i = 0; i < nbFDs; i++) {
+			if (fds[i].fd != -1) {
+				fds[j] = fds[i];
+				j++;
+			}
+		}
+		nbFDs = j;
 	}
+	return (0);
 }
 
 int	main(int argc, char **argv)
