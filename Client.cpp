@@ -19,8 +19,8 @@ Client	&Client::operator=(const Client &t)
 {
 	if (this != &t)
 	{
-		delete this;
-		return (*(new Client(t)));
+		_socket = t._socket;
+		_nickname = t._nickname;
 	}
 	return (*this);
 }

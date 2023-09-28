@@ -6,12 +6,36 @@
 /*   By: tadiyamu <tadiyamu@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/09/21 13:41:47 by tadiyamu          #+#    #+#             */
-/*   Updated: 2023/09/27 18:05:45 by tadiyamu         ###   ########.fr       */
+/*   Updated: 2023/09/28 14:56:42 by tadiyamu         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ircserv.hpp"
 #include "Client.hpp"
+
+
+void sendCapLsResponse(int clientSocket) {
+	std::string response = "CAP * LS :302\r\n";
+	send(clientSocket, response.c_str(), response.length(), 0);
+}
+
+void	sendWelcome(int clientSocket)
+{
+	std::string response = "Welcome to the Internet Relay Network tadiyamu!tadiyamu@localhost\r\n";
+	send(clientSocket, response.c_str(), response.length(), 0);
+}
+
+void tokenize(std::string const &str, const char delim,
+            std::vector<std::string> &out)
+{
+    // construct a stream from the string
+    std::stringstream ss(str);
+
+    std::string s;
+    while (std::getline(ss, s, delim)) {
+        out.push_back(s);
+    }
+}
 
 int	createServerSocket(int port, std::string password)
 {
@@ -85,10 +109,12 @@ int	createServerSocket(int port, std::string password)
 					fds[nbFDs].fd = clientSocket;
 					fds[nbFDs].events = POLLIN;
 					nbFDs++;
+					sendCapLsResponse(clientSocket);
 				}
 				else
 				{
 					char buffer[1024];
+					memset(buffer, 0, 1024);
 					int bytesRead = recv(fds[i].fd, buffer, sizeof(buffer), 0);
 					if (bytesRead <= 0)
 					{
@@ -98,7 +124,11 @@ int	createServerSocket(int port, std::string password)
 					}
 					else
 					{
-						std::cout << buffer << std::endl;
+						std::vector<std::string> tokens;
+						const std::string temp = buffer;
+						std::cout << temp << std::endl;
+						tokenize(temp, ' ', tokens);
+						sendWelcome(clients[i].getSocket());
 					}
 				}
 			}
