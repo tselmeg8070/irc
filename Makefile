@@ -4,10 +4,12 @@ CFLAGS = -Wall -Wextra -Werror
 CPPFLAGS = -std=c++98
 
 SRCS =	ircserv.cpp \
-		Client.cpp
+		Client.cpp \
+		Command.cpp
 
 INCLS = ircserv.hpp \
-		Client.hpp
+		Client.hpp \
+		Command.hpp
 
 OBJS = $(SRCS:.cpp=.o)
 

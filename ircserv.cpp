@@ -6,15 +6,16 @@
 /*   By: tadiyamu <tadiyamu@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/09/21 13:41:47 by tadiyamu          #+#    #+#             */
-/*   Updated: 2023/09/28 14:56:42 by tadiyamu         ###   ########.fr       */
+/*   Updated: 2023/09/29 18:59:27 by tadiyamu         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ircserv.hpp"
 #include "Client.hpp"
+#include "Command.hpp"
+#include "ircserv.hpp"
 
-
-void sendCapLsResponse(int clientSocket) {
+void	sendCapLsResponse(int clientSocket)
+{
 	std::string response = "CAP * LS :302\r\n";
 	send(clientSocket, response.c_str(), response.length(), 0);
 }
@@ -25,16 +26,20 @@ void	sendWelcome(int clientSocket)
 	send(clientSocket, response.c_str(), response.length(), 0);
 }
 
-void tokenize(std::string const &str, const char delim,
-            std::vector<std::string> &out)
+std::vector<std::string> customSplit(std::string s, std::string delimiter)
 {
-    // construct a stream from the string
-    std::stringstream ss(str);
-
-    std::string s;
-    while (std::getline(ss, s, delim)) {
-        out.push_back(s);
-    }
+	size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+	std::string token;
+	std::vector<std::string> res;
+	while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos)
+	{
+		token = s.substr(pos_start, pos_end - pos_start + delimiter.size());
+		pos_start = pos_end + delim_len;
+		res.push_back(token);
+	}
+	if (s.substr(pos_start).size() > 0)
+		res.push_back(s.substr(pos_start));
+	return (res);
 }
 
 int	createServerSocket(int port, std::string password)
@@ -45,8 +50,14 @@ int	createServerSocket(int port, std::string password)
 	struct sockaddr_in	serverAddress;
 	struct pollfd		fds[MAX_EVENTS];
 	int					pollResult;
+					struct sockaddr_in clientAddress;
+	socklen_t			clientAddressLength;
+	int					clientSocket;
+					char buffer[1024];
+	int					bytesRead;
+	int					j;
 
-	(void) password;
+	(void)password;
 	memset(fds, 0, sizeof(fds));
 	opt = 1;
 	sockFD = socket(AF_INET, SOCK_STREAM, 0);
@@ -56,7 +67,8 @@ int	createServerSocket(int port, std::string password)
 		exit(1);
 	}
 	//to allow multiple connections
-	if (setsockopt(sockFD, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
+	if (setsockopt(sockFD, SOL_SOCKET, SO_REUSEADDR, (char *)&opt,
+			sizeof(opt)) < 0)
 	{
 		std::cerr << "setsockopt err to port" << std::endl;
 		close(sockFD);
@@ -65,7 +77,8 @@ int	createServerSocket(int port, std::string password)
 	serverAddress.sin_family = AF_INET;
 	serverAddress.sin_addr.s_addr = INADDR_ANY;
 	serverAddress.sin_port = htons(port);
-	if (bind(sockFD, (struct sockaddr*) &serverAddress, sizeof(serverAddress)) == -1)
+	if (bind(sockFD, (struct sockaddr *)&serverAddress,
+			sizeof(serverAddress)) == -1)
 	{
 		std::cerr << "Socket binding err to port" << std::endl;
 		close(sockFD);
@@ -88,7 +101,7 @@ int	createServerSocket(int port, std::string password)
 		if (pollResult == -1)
 		{
 			std::cerr << "Error in poll: " << std::endl;
-			break;
+			break ;
 		}
 		for (int i = 0; i < nbFDs; i++)
 		{
@@ -97,12 +110,14 @@ int	createServerSocket(int port, std::string password)
 				if (fds[i].fd == sockFD)
 				{
 					//Adding new socket client to server
-					struct sockaddr_in clientAddress;
-					socklen_t clientAddressLength = sizeof(clientAddress);
-					int clientSocket = accept(sockFD, (struct sockaddr*)&clientAddress, &clientAddressLength);
-					if (clientSocket == -1) {
-						std::cerr << "Error accepting client connection"  << std::endl;
-						continue;
+					clientAddressLength = sizeof(clientAddress);
+					clientSocket = accept(sockFD,
+							(struct sockaddr *)&clientAddress,
+							&clientAddressLength);
+					if (clientSocket == -1)
+					{
+						std::cerr << "Error accepting client connection" << std::endl;
+						continue ;
 					}
 					Client newClient(clientSocket, "guest");
 					clients.push_back(newClient);
@@ -113,9 +128,8 @@ int	createServerSocket(int port, std::string password)
 				}
 				else
 				{
-					char buffer[1024];
 					memset(buffer, 0, 1024);
-					int bytesRead = recv(fds[i].fd, buffer, sizeof(buffer), 0);
+					bytesRead = recv(fds[i].fd, buffer, sizeof(buffer), 0);
 					if (bytesRead <= 0)
 					{
 						close(fds[i].fd);
@@ -124,19 +138,40 @@ int	createServerSocket(int port, std::string password)
 					}
 					else
 					{
-						std::vector<std::string> tokens;
-						const std::string temp = buffer;
-						std::cout << temp << std::endl;
-						tokenize(temp, ' ', tokens);
-						sendWelcome(clients[i].getSocket());
+						std::string temp = buffer;
+						std::vector<std::string> instructions = split(temp, "\r\n");
+						for (size_t j = 0; j < instructions.size(); j++)
+						{
+							Command command(instructions[j]);
+							for (size_t i = 0; i < instructions[j].size(); i++)
+							{
+								if (instructions[j][i] == '\r')
+									std::cout << "\\r";
+								else if (instructions[j][i] == '\n')
+									std::cout << "\\n";
+								else
+									std::cout << instructions[j][i];
+							}
+							std::cout << std::endl;
+							if (command.getCommand().size() != 0)
+							{
+								std::cout << "Command: " << command.getCommand() << std::endl;
+								std::cout << "Parameters: " << std::endl;
+								std::vector<std::string> &parameters = command.getParameters();
+								for (size_t i = 0; i < parameters.size(); i++)
+									std::cout << "- " << parameters[i] << std::endl;
+							}
+						}
 					}
 				}
 			}
 		}
 		//shifting fds
-		int j = 0;
-		for (int i = 0; i < nbFDs; i++) {
-			if (fds[i].fd != -1) {
+		j = 0;
+		for (int i = 0; i < nbFDs; i++)
+		{
+			if (fds[i].fd != -1)
+			{
 				fds[j] = fds[i];
 				j++;
 			}
@@ -148,9 +183,9 @@ int	createServerSocket(int port, std::string password)
 
 int	main(int argc, char **argv)
 {
-	int			port;
-	std::string	password;
+	int	port;
 
+	std::string password;
 	if (argc != 3)
 	{
 		std::cerr << "Wrong number of args" << std::endl;
